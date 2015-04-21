@@ -748,72 +748,240 @@ void Solver_MCSVM_CS::Solve(double *w)
 }
 
 // (Z)
+
+void L2Regularize(double eta, double lambda, double *w, int w_size) {
+  double scaling_factor = 1.0 - (eta * lambda);
+  int i;
+  if (scaling_factor > MIN_SCALING_FACTOR) {
+    for (i = 0; i < w_size; ++i) 
+      w[i] *= scaling_factor;
+  } else {
+    for (i = 0; i < w_size; ++i)
+      w[i] *= MIN_SCALING_FACTOR;
+  }
+}
+
+void PegasosProjection(double lambda, double *w, int w_size) {
+  double w_sqnorm = 0.0;
+  int i;
+  for (i = 0; i < w_size; ++i) {
+    w_sqnorm += w[i] * w[i];
+  }
+  double projection_val = 1.0 / sqrt(lambda * w_sqnorm);
+  if (projection_val < 1.0) {
+    for (int i = 0; i < w_size; ++i) {
+      w[i] *= projection_val;
+    }
+  }
+}
 static void solve_pegasos(
 	const problem *prob, double *w, const parameter *param,
-	int solver_type)
+	int solver_type) 
 {
+  //srand(time(NULL));
   double lambda = param->lambda;
 	int l = prob->l;
-	int w_size = prob->n;
+  int w_size = prob->n;
   int i, j;
+  double projection_constant  = 0.0;
+
+  for (j = 0; j < w_size; ++j) {
+    w[j] = 0.0;//(double)rand()/(double)RAND_MAX;
+  }
 
 	schar *y = new schar[l];
 
+  int cnt_pos = 0, cnt_neg = 0;
+	for(i=0; i<l; i++)
+	{
+		if(prob->y[i] > 0)
+		{
+      //printf("pos!");
+			y[i] = +1;
+      cnt_pos += 1;
+		}
+		else
+		{
+      //printf("neg!");
+			y[i] = -1;
+      cnt_neg += 1;
+		}
+	}
+  printf("%d(pos.):%d(neg.)\n", cnt_pos, cnt_neg);
+
+  int cnt = 0;
+  int ii;
+  //int sign = 1;
+  int *order = new int[l];
+  for (i = 0; i < l; ++i) {
+    order[i] = i;
+  }
+
+  for (i = 0; i < l; ++i) {
+    j = rand() % (l-i);
+    swap(order[j], order[l-i-1]);
+  }
+	
+  for (i = 0; i < l; ++i) {
+    ii = i;
+    i = order[i];
+
+    //do {
+    //  i = rand() % l;
+    //} while (y[i] * sign < 0);
+    //sign *= -1;
+
+
+    //printf("%d) Sample %d:", ii, i);
+    double eta = 1.0/(lambda * (i+100));
+
+    double wTx = 0.0;
+   	feature_node *xi = prob->x[i];
+  	while (xi->index != -1) {
+			wTx += w[xi->index-1] * xi->value;
+			xi++;
+		}
+
+    double prediction = wTx;
+
+    //printf("\tpredict:%f, \ttrue label:%d\t", prediction, y[i]);
+
+    double cur_loss = 1.0 - y[i] * prediction;
+    if (cur_loss < 0.0) cur_loss = 0.0;
+
+    if (cur_loss > 0.0) {
+      cnt += 1;
+      //printf("1) w*=%f\t", 1.0-eta*lambda);
+      for (j = 0; j < w_size; ++j) {
+        w[j] *= (1.0 - eta*lambda);
+      }
+     	xi = prob->x[i];
+      //printf("2) w+=%fx\t", eta * y[i]);
+    	while (xi->index != -1) {
+	  		w[xi->index-1] += xi->value * eta * y[i];
+	  		xi++;
+	  	}
+    }
+
+    double norm2 = 0.0;
+    for (j = 0; j < w_size; ++j) norm2 += w[j] * w[j];
+    if (norm2 > 1.0/lambda) {
+      //printf("3) w*=%f\t", sqrt(1.0/(lambda*norm2)));
+      for (j = 0; j < w_size; ++j) 
+        w[j] *= sqrt(1.0/(lambda*norm2));
+    }
+    i = ii;
+    //printf("\n");
+  }
+
+  printf("loss cnt: %d\n", cnt);
+  printf("lambda: %f\n", lambda);
+	
+}
+
+
+static void solve_pegasos_sofia(
+	const problem *prob, double *w, const parameter *param,
+	int solver_type)
+{
+
+  double lambda = param->lambda;
+	int l = prob->l;
+  int w_size = prob->n;
+  int i, j;
+  //srand(time(NULL));
+
+  for (j = 0; j < w_size; ++j) {
+    w[j] = 0.0;
+  }
+
+  //for (i = 0; i < 4; ++i) {
+  //  printf("%f->", w[i]);
+  //}
+
+	schar *y = new schar[l];
+
+  int cnt_pos = 0, cnt_neg = 0;
 	for(i=0; i<l; i++)
 	{
 		if(prob->y[i] > 0)
 		{
 			y[i] = +1;
+      cnt_pos += 1;
 		}
 		else
 		{
 			y[i] = -1;
+      cnt_neg += 1;
 		}
 	}
-	
-  //int max_sub = 1;
+  printf("%d(pos.):%d(neg.)\n", cnt_pos, cnt_neg);
+
+  int *order = new int[l];
+  for (i = 0; i < l; ++i) {
+    order[i] = i;
+  }
 
   for (i = 0; i < l; ++i) {
+    j = rand() % (l-i);
+    swap(order[j], order[l-i-1]);
+  }
+	
+  //int max_sub = 1;
+  //double eta = 0.001;
+  int t;
+  int ii;
+  for (t = 0; t < 1; ++t) {
+  for (i = 0; i < l; ++i) {
+    ii = i;
+    i = order[i];
+    //i = rand() % l;
+    printf("sample %d label:%d\n", i, y[i]);
     double eta = 1.0 / (lambda * (i+2));
+    //double eta = 0.01;
 
 	  schar yi = y[i];
   	double ywTx = 0.0; //xisq = xTx[i];
   	feature_node *xi = prob->x[i];
   	while (xi->index != -1)
   	{
-			ywTx += w[xi->index-1]*xi->value;
+			ywTx += w[xi->index-1] * xi->value;
 			xi++;
 		}
-		ywTx *= y[i];
+		ywTx *= yi;
 
-    /* L2Regularize begin */
+    /* L2Regularize begin 
     double scaling_factor = max(1.0 - (eta * lambda), MIN_SCALING_FACTOR);
     for (j = 0; j < w_size; ++j) {
       w[j] *= scaling_factor;
     }
     /* L2Regularize end */
-    
+    L2Regularize(eta, lambda, w, w_size);
 
-    if (ywTx < 1.0 && y[i] != 0.0) {
+    if (ywTx < 1.0 && yi != 0.0) {
       xi = prob->x[i];
       while (xi->index != -1) {
-        w[xi->index-1] += eta * y[i] * xi->value;
+        w[xi->index-1] += eta * yi * xi->value;
+        xi++;
       }
-      // w += eta * y[i] * x[i]
+      // w += eta * y[i] * X[i]
     }
 
-    /*projection begin*/
+    /*pegasos projection begin
     double w_sqnorm = 0.0;
-    for (j = 0; j < w_size; ++j) 
+    for (j = 0; j < w_size; ++j) {
       w_sqnorm += w[j] * w[j];
+    }
 
     double projection_val = 1.0 / sqrt(lambda * w_sqnorm);
     if (projection_val < 1.0) {
       for (j = 0; j < w_size; ++j) {
-        w[i] *= projection_val;
+        w[j] *= projection_val;
       }
     }
     /*projection end*/
+    PegasosProjection(lambda, w, w_size);
+    i = ii;
 
     // pegasos_projection(lambda, w);
  /* sofia-ml
@@ -828,6 +996,10 @@ static void solve_pegasos(
  * 476     PegasosProjection(lambda, w);
  * 477     return (p < 1.0 && x.GetY() != 0.0);
  */    
+  }
+  }
+  for (i = 0; i < 4; ++i) {
+    printf("%f->", w[i]);
   }
 }
 // A coordinate descent algorithm for 
@@ -2370,6 +2542,7 @@ static void train_one(const problem *prob, const parameter *param, double *w, do
       solve_pegasos(prob, w, param, PEGASOS);
       break;
 		default:
+      fprintf(stderr, "solver type %s", param->solver_type);
 			fprintf(stderr, "ERROR: unknown solver_type\n");
 			break;
 	}
@@ -2662,7 +2835,7 @@ static const char *solver_type_table[]=
 	"L2R_LR", "L2R_L2LOSS_SVC_DUAL", "L2R_L2LOSS_SVC", "L2R_L1LOSS_SVC_DUAL", "MCSVM_CS",
 	"L1R_L2LOSS_SVC", "L1R_LR", "L2R_LR_DUAL",
 	"", "", "",
-	"L2R_L2LOSS_SVR", "L2R_L2LOSS_SVR_DUAL", "L2R_L1LOSS_SVR_DUAL", NULL
+	"L2R_L2LOSS_SVR", "L2R_L2LOSS_SVR_DUAL", "L2R_L1LOSS_SVR_DUAL", "PEGASOS", NULL
 };
 
 int save_model(const char *model_file_name, const struct model *model_)
@@ -2756,7 +2929,7 @@ struct model *load_model(const char *model_file_name)
 			}
 			if(solver_type_table[i] == NULL)
 			{
-				fprintf(stderr,"unknown solver type.\n");
+				fprintf(stderr,"1) unknown solver type.\n");
 
 				setlocale(LC_ALL, old_locale);
 				free(model_->label);
@@ -2793,7 +2966,7 @@ struct model *load_model(const char *model_file_name)
 		}
 		else
 		{
-			fprintf(stderr,"unknown text in model file: [%s]\n",cmd);
+			fprintf(stderr,"2) unknown text in model file: [%s]\n",cmd);
 			setlocale(LC_ALL, old_locale);
 			free(model_->label);
 			free(model_);
@@ -2942,7 +3115,8 @@ const char *check_parameter(const problem *prob, const parameter *param)
 		&& param->solver_type != L2R_LR_DUAL
 		&& param->solver_type != L2R_L2LOSS_SVR
 		&& param->solver_type != L2R_L2LOSS_SVR_DUAL
-		&& param->solver_type != L2R_L1LOSS_SVR_DUAL)
+		&& param->solver_type != L2R_L1LOSS_SVR_DUAL
+    && param->solver_type != PEGASOS)
 		return "unknown solver type";
 
 	return NULL;

@@ -190,6 +190,7 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 	param.weight = NULL;
 	flag_cross_validation = 0;
 	bias = -1;
+  param.lambda = 0.01;
 
 	// parse options
 	for(i=1;i<argc;i++)
