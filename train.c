@@ -29,9 +29,11 @@ void exit_with_help()
 	"	11 -- L2-regularized L2-loss support vector regression (primal)\n"
 	"	12 -- L2-regularized L2-loss support vector regression (dual)\n"
 	"	13 -- L2-regularized L1-loss support vector regression (dual)\n"
+	"	14 -- pegasos (Z)\n"
 	"-c cost : set the parameter C (default 1)\n"
 	"-p epsilon : set the epsilon in loss function of SVR (default 0.1)\n"
 	"-e epsilon : set tolerance of termination criterion\n"
+	"-l lambda: set lambda for pegasos (Z) \n"
 	"	-s 0 and 2\n"
 	"		|f'(w)|_2 <= eps*min(pos,neg)/l*|f'(w0)|_2,\n"
 	"		where f is the primal function and pos/neg are # of\n"
@@ -67,7 +69,7 @@ static char* readline(FILE *input)
 {
 	int len;
 
-	if(fgets(line,max_line_len,input) == NULL)
+  if(fgets(line,max_line_len,input) == NULL)
 		return NULL;
 
 	while(strrchr(line,'\n') == NULL)
@@ -213,6 +215,10 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 				param.eps = atof(argv[i]);
 				break;
 
+      case 'l':
+        param.lambda = atof(argv[i]);
+        break; // (Z)
+
 			case 'B':
 				bias = atof(argv[i]);
 				break;
@@ -292,6 +298,8 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 			case L2R_L2LOSS_SVR_DUAL:
 				param.eps = 0.1;
 				break;
+      case PEGASOS: // (Z)
+        break;
 		}
 	}
 }

@@ -22,6 +22,8 @@ template <class S, class T> static inline void clone(T*& dst, S* src, int n)
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 #define INF HUGE_VAL
 
+#define MIN_SCALING_FACTOR 0.0000001
+
 static void print_string_stdout(const char *s)
 {
 	fputs(s,stdout);
@@ -745,6 +747,89 @@ void Solver_MCSVM_CS::Solve(double *w)
 	delete [] active_size_i;
 }
 
+// (Z)
+static void solve_pegasos(
+	const problem *prob, double *w, const parameter *param,
+	int solver_type)
+{
+  double lambda = param->lambda;
+	int l = prob->l;
+	int w_size = prob->n;
+  int i, j;
+
+	schar *y = new schar[l];
+
+	for(i=0; i<l; i++)
+	{
+		if(prob->y[i] > 0)
+		{
+			y[i] = +1;
+		}
+		else
+		{
+			y[i] = -1;
+		}
+	}
+	
+  //int max_sub = 1;
+
+  for (i = 0; i < l; ++i) {
+    double eta = 1.0 / (lambda * (i+2));
+
+	  schar yi = y[i];
+  	double ywTx = 0.0; //xisq = xTx[i];
+  	feature_node *xi = prob->x[i];
+  	while (xi->index != -1)
+  	{
+			ywTx += w[xi->index-1]*xi->value;
+			xi++;
+		}
+		ywTx *= y[i];
+
+    /* L2Regularize begin */
+    double scaling_factor = max(1.0 - (eta * lambda), MIN_SCALING_FACTOR);
+    for (j = 0; j < w_size; ++j) {
+      w[j] *= scaling_factor;
+    }
+    /* L2Regularize end */
+    
+
+    if (ywTx < 1.0 && y[i] != 0.0) {
+      xi = prob->x[i];
+      while (xi->index != -1) {
+        w[xi->index-1] += eta * y[i] * xi->value;
+      }
+      // w += eta * y[i] * x[i]
+    }
+
+    /*projection begin*/
+    double w_sqnorm = 0.0;
+    for (j = 0; j < w_size; ++j) 
+      w_sqnorm += w[j] * w[j];
+
+    double projection_val = 1.0 / sqrt(lambda * w_sqnorm);
+    if (projection_val < 1.0) {
+      for (j = 0; j < w_size; ++j) {
+        w[i] *= projection_val;
+      }
+    }
+    /*projection end*/
+
+    // pegasos_projection(lambda, w);
+ /* sofia-ml
+ * 468     float p = x.GetY() * w->InnerProduct(x);
+ * 469 
+ * 470     L2Regularize(eta, lambda, w);
+ * 471     // If x has non-zero loss, perform gradient step in direction of x.
+ * 472     if (p < 1.0 && x.GetY() != 0.0) {
+ * 473       w->AddVector(x, (eta * x.GetY()));
+ * 474     }
+ * 475 
+ * 476     PegasosProjection(lambda, w);
+ * 477     return (p < 1.0 && x.GetY() != 0.0);
+ */    
+  }
+}
 // A coordinate descent algorithm for 
 // L1-loss and L2-loss SVM dual problems
 //
@@ -2281,6 +2366,9 @@ static void train_one(const problem *prob, const parameter *param, double *w, do
 		case L2R_L2LOSS_SVR_DUAL:
 			solve_l2r_l1l2_svr(prob, w, param, L2R_L2LOSS_SVR_DUAL);
 			break;
+    case PEGASOS: //(Z)
+      solve_pegasos(prob, w, param, PEGASOS);
+      break;
 		default:
 			fprintf(stderr, "ERROR: unknown solver_type\n");
 			break;
