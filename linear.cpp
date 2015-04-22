@@ -786,7 +786,7 @@ static void solve_pegasos(
   double projection_constant  = 0.0;
 
   for (j = 0; j < w_size; ++j) {
-    w[j] = 0.0;//(double)rand()/(double)RAND_MAX;
+    w[j] = (double)rand()/(double)RAND_MAX;
   }
 
 	schar *y = new schar[l];
